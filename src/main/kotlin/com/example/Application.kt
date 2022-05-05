@@ -1,17 +1,11 @@
 package com.example
 
+import com.example.plugins.configureRouting
+import com.example.plugins.configureSerialization
 import io.ktor.server.application.*
-import com.example.plugins.*
-import io.netty.internal.tcnative.AsyncTask
 import org.jsoup.Jsoup
-import org.jsoup.nodes.Document
-import org.jsoup.nodes.Element
 
-fun main(args: Array<String>): Unit = scrape()
-//    io.ktor.server.netty.EngineMain.main(args)
-
-
-
+fun main(args: Array<String>): Unit = io.ktor.server.netty.EngineMain.main(args)
 
 @Suppress("unused") // application.conf references the main function. This annotation prevents the IDE from marking it as unused.
 fun Application.module() {
@@ -19,67 +13,30 @@ fun Application.module() {
     configureSerialization()
 }
 
-val wiki = "https://en.wikipedia.org"
+val memedroid = "https://www.memedroid.com/"
 
-fun scrape() {
-    val doc = Jsoup.connect("$wiki/wiki/List_of_films_with_a_100%25_rating_on_Rotten_Tomatoes").get()    // <1>
-    doc.select(".wikitable:first-of-type tr td:first-of-type a")    // <2>
-        .map { col -> col.attr("href") }    // <3>
-        .parallelStream()    // <4>
-        .map { extractMovieData(it) }    // <5>
-        .filter { it != null }
-        .forEach { println(it) }
-}
+// TODO: Move into it's own class, leaving it here for simplicity to demo for now
+data class Meme(val title: String, val image: String, val tag: String, val votes: String, val percentLiked: String)
+fun scrapeMemeDroid(): List<Meme> {
+    val data = mutableListOf<Meme>()
+    val document = Jsoup.connect("$memedroid/memes/random").get()
+    val events = document.select("div.item-aux-container")
 
-fun extractMovieData(url: String): Movie? { // <1>
-    val doc: Document
-    try {
-        doc = Jsoup.connect("$wiki$url").get()  // <2>
-    }catch (e: Exception){
-        return null
-    }
+    val tagsContainer = document.select("div.tags-container")
 
-    val movie = Movie() // <3>
-    doc.select(".infobox tr")   // <4>
-        .forEach { ele ->   // <5>
-            when {
-                ele.getElementsByTag("th")?.hasClass("summary") ?: false -> {   // <6>
-                    movie.title = ele.getElementsByTag("th")?.text()
-                }
-                else -> {
-                    val value: String? = if (ele.getElementsByTag("li").size > 1)
-                        ele.getElementsByTag("li")
-                            .map(Element::text)
-                            .filter(String::isNotEmpty)
-                            .joinToString(", ") else
-                        ele.getElementsByTag("td")?.first()?.text() // <7>
+    events.forEachIndexed { index, element ->
+        element.apply {
+            val title = select("a.item-header-title.dyn-link").text()
+            val image = select("a.dyn-link")
+                .select("img").attr("src")
+            val votes = select("span.item-rating-vote-count").text()
+            val percentLiked = select("span.green-1").text()
 
-                    when (ele.getElementsByTag("th")?.first()?.text()) {    // <8>
-                        "Directed by" -> movie.directedBy = value ?: ""
-                        "Produced by" -> movie.producedBy = value ?: ""
-                        "Written by" -> movie.writtenBy = value ?: ""
-                        "Starring" -> movie.starring = value ?: ""
-                        "Music by" -> movie.musicBy = value ?: ""
-                        "Release date" -> movie.releaseDate = value ?: ""
-                        "title" -> movie.title = value ?: ""
-                    }
-                }
-            }
+            val tag = tagsContainer.select("a.dyn-link").eq(index).text() // Uses different container so eq find
+
+            data.add(Meme(title, image, tag, votes, percentLiked))
         }
-    return movie
-}
-
-class Movie {
-    var title: String? = ""
-    var directedBy: String = ""
-    var producedBy: String = ""
-    var writtenBy: String = ""
-    var starring: String = ""
-    var musicBy: String = ""
-    var releaseDate: String = ""
-
-    override fun toString(): String {
-        return "Movie(title='$title')"
     }
 
+    return data.toList() //To List to prevent mutations
 }
