@@ -14,5 +14,9 @@ fun Application.configureRouting() {
           val scrapedData = scrapeMemeDroid()
           call.respondText("$scrapedData")
       }
+        get("meme/feed") {
+            //
+            call.respondText("Working on returning the next meme")
+        }
     }
 }
